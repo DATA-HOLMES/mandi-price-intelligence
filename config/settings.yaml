@@ -1,0 +1,64 @@
+project:
+  name: mandi-price-intelligence
+  price_unit_stored: INR_per_quintal
+  price_unit_display: INR_per_kg
+  quintal_to_kg: 100
+
+scope:
+  commodities:
+    - Onion
+    - Potato
+    - Tomato
+  home_state: Rajasthan
+  home_district: Jaipur
+  supply_states:
+    - Uttar Pradesh
+    - Madhya Pradesh
+    - Gujarat
+    - Maharashtra
+  start_date: "2018-01-01"
+  end_date: null
+
+paths:
+  raw_ceda: data/raw/ceda
+  raw_kaggle: data/raw/kaggle_raw
+  interim: data/interim
+  processed: data/processed
+  quarantine: data/quarantine
+  reference: data/reference
+  sample: data/sample
+  figures: reports/figure
+
+sources:
+  ceda:
+    base_url: null               # fill ONLY after reading the CEDA API docs (Week 1)
+    timeout_seconds: 60
+    max_retries: 5
+    delay_between_requests_seconds: 1.0   # polite default; replace with the documented rate limit
+  kaggle:
+    primary_dataset: anishaman07/agmarknet-india-commodity-prices-oct24-aug25
+    backup_dataset: arjunyadav99/indian-agricultural-mandi-prices-20232025
+
+thresholds:
+  # Fuzzy market-name matching (rapidfuzz score, 0-100):
+  #   >= auto_accept -> mapped automatically
+  #   between review_min and auto_accept -> manual review
+  #   < review_min -> UNMAPPED_MARKET (quarantined)
+  fuzzy_auto_accept_score: 92
+  fuzzy_review_min_score: 80
+
+  # Flag a price as SCALE_ERROR_SUSPECT if it is >= 8x or <= 1/8 of that
+  # market's rolling median. Aimed at 10x/100x unit-entry mistakes.
+  # Must be checked against real spikes in Week 1 profiling.
+  scale_error_ratio: 8
+
+  # A market must report on at least this many days per year to be used
+  # in cross-mandi comparisons.
+  min_reporting_days_per_year: 100
+
+  # Spike detection (rolling robust z-score on log modal price), tuned in Week 3
+  spike_z_threshold: 3.0
+  spike_window_days: 45
+
+  # Haversine (straight-line) distance x this factor = estimated road distance
+  road_distance_factor: 1.3

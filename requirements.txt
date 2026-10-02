@@ -1,0 +1,37 @@
+# Data processing
+pandas>=2.2
+numpy>=1.26
+polars>=1.0
+duckdb>=1.0
+pyarrow>=15.0
+
+# Ingestion
+requests>=2.31
+
+# Cleaning (fuzzy market-name matching)
+rapidfuzz>=3.6
+
+# Statistics
+scipy>=1.11
+statsmodels>=0.14
+
+# Charts and notebooks
+matplotlib>=3.8
+seaborn>=0.13
+jupyterlab>=4.0
+ipykernel>=6.29
+
+# Database
+SQLAlchemy>=2.0
+psycopg[binary]>=3.1
+
+# Geography (district centroids for distances, Week 2)
+geopandas>=0.14
+
+# Excel export
+openpyxl>=3.1
+
+# Config and testing
+PyYAML>=6.0
+python-dotenv>=1.0
+pytest>=8.0

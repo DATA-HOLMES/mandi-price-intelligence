@@ -1,0 +1,18 @@
+{
+  "resolved_on": "2026-10-09",
+  "commodities": {
+    "Onion": 23,
+    "Potato": 24,
+    "Tomato": 78
+  },
+  "states": {
+    "Rajasthan": 8,
+    "Uttar Pradesh": 9,
+    "Madhya Pradesh": 23,
+    "Gujarat": 24,
+    "Maharashtra": 27
+  },
+  "home_district": {
+    "Jaipur": 110
+  }
+}

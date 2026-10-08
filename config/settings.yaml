@@ -31,7 +31,7 @@ paths:
 
 sources:
   ceda:
-    base_url: null               # fill ONLY after reading the CEDA API docs (Week 1)
+    base_url: "https://api.ceda.ashoka.edu.in/v1"            # fill ONLY after reading the CEDA API docs (Week 1)
     timeout_seconds: 60
     max_retries: 5
     delay_between_requests_seconds: 1.0   # polite default; replace with the documented rate limit

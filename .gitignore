@@ -37,3 +37,5 @@ desktop.ini
 
 # ---------- Office lock files (created while Excel/Word has a file open) ----------
 ~$*
+
+notebooks/scratch/

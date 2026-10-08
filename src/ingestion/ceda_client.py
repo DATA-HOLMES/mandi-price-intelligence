@@ -8,10 +8,12 @@ PLUMBING. Built in pieces:
 """
 import difflib
 import json
+import time
 from datetime import date
 from pathlib import Path
+import requests
 
-from src.utils.config import ROOT
+from src.utils.config import ROOT  ,get_secret, load_settings
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
@@ -67,3 +69,74 @@ def save_ids_snapshot(ids: dict) -> Path:
     IDS_PATH.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
     log.info("Saved ID snapshot to %s", IDS_PATH)
     return IDS_PATH
+
+# ---------- 1.8b: one safe request ----------
+
+def make_session() -> requests.Session:
+    """HTTP session carrying the API key. The key is never logged."""
+    session = requests.Session()
+    session.headers.update({
+        "Authorization": f"Bearer {get_secret('CEDA_API_KEY')}",
+        "Accept": "application/json",
+    })
+    return session
+
+
+def seconds_until_reset(response: requests.Response) -> float:
+    """Seconds to wait until the hourly quota resets.
+
+    RateLimit-Reset's format is undocumented: a huge number is treated as a
+    clock timestamp, a small one as seconds remaining. Falls back to 60 s.
+    """
+    try:
+        value = float(response.headers.get("RateLimit-Reset"))
+    except (TypeError, ValueError):
+        return 60.0
+    if value > 1_000_000_000:  # looks like a Unix timestamp
+        value -= time.time()
+    return max(value, 0) + 2  # 2 s safety margin
+
+
+def ceda_request(session: requests.Session, method: str, path: str,
+                 body: dict | None = None) -> requests.Response:
+    """Send one request politely.
+
+    - waits for the quota reset when RateLimit-Remaining hits 0
+    - retries on 429, server errors (5xx) and network errors
+    - stops immediately on other errors (a 4xx means our request is wrong)
+    """
+    cfg = load_settings()["sources"]["ceda"]
+    url = f"{cfg['base_url']}{path}"
+
+    for attempt in range(1, cfg["max_retries"] + 1):
+        try:
+            resp = session.request(method, url, json=body, timeout=cfg["timeout_seconds"])
+        except requests.RequestException as err:
+            wait = 2 ** attempt
+            log.warning("%s %s failed (%s); retry %d in %ds", method, path, err, attempt, wait)
+            time.sleep(wait)
+            continue
+
+        remaining = resp.headers.get("RateLimit-Remaining")
+        log.info("%s %s -> HTTP %s | quota left %s | reset %s", method, path,
+                 resp.status_code, remaining, resp.headers.get("RateLimit-Reset"))
+
+        if resp.status_code == 429:
+            wait = seconds_until_reset(resp)
+            log.warning("Rate limit hit; sleeping %.0f s", wait)
+            time.sleep(wait)
+            continue
+        if resp.status_code >= 500:
+            wait = 2 ** attempt
+            log.warning("Server error; retry %d in %ds", attempt, wait)
+            time.sleep(wait)
+            continue
+        resp.raise_for_status()  # any other error: stop, don't waste quota
+
+        if remaining is not None and int(remaining) == 0:
+            wait = seconds_until_reset(resp)
+            log.info("Quota used up; sleeping %.0f s before continuing", wait)
+            time.sleep(wait)
+        return resp
+
+    raise RuntimeError(f"{method} {path} failed after {cfg['max_retries']} attempts")

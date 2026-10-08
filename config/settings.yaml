@@ -32,9 +32,8 @@ paths:
 sources:
   ceda:
     base_url: "https://api.ceda.ashoka.edu.in/v1"            # fill ONLY after reading the CEDA API docs (Week 1)
-    timeout_seconds: 60
-    max_retries: 5
-    delay_between_requests_seconds: 1.0   # polite default; replace with the documented rate limit
+    timeout_seconds: 120
+    max_retries: 3  # polite default; replace with the documented rate limit
   kaggle:
     primary_dataset: anishaman07/agmarknet-india-commodity-prices-oct24-aug25
     backup_dataset: arjunyadav99/indian-agricultural-mandi-prices-20232025

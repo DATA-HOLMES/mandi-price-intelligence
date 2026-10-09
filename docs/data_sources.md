@@ -43,9 +43,12 @@
 - The API returns no variety or grade. The README says the underlying data is unique per variety and grade, so the API collapses varieties; the rule is undocumented.
 - One row per date × market × commodity, with rare exceptions: 3 of 55,368 Rajasthan onion price rows share a date and market with different prices (likely unlabeled varieties). See `data_quality_report.md`.
 ### Rate limit
-- 40 requests per hour, fixed window starting at the first call.
-- Headers: `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`.
-- HTTP 429 when exceeded.
+- Limit: 40 requests per hour, fixed window starting at the first call.
+- Headers: `RateLimit-Limit`, `RateLimit-Remaining`, `RateLimit-Reset`. HTTP 429 when exceeded.
+- `RateLimit-Reset` = seconds until the window resets (not a clock time).
+  - Evidence: first call of the hour on 2026-10-09 returned Remaining = 39, Reset = 3600 (exactly 1 hour).
+  - So what: when Remaining reaches 0, or a 429 arrives, `ceda_request` waits Reset + 2 seconds before the next call.
+  - Status: confirmed on the first call; check that it counts down during the full pull (1.9).
 ### Request strategy
 - One request per state × commodity × endpoint, covering 2018-01-01 to today.
 - Verified no truncation **for Rajasthan only**: the Jaipur rows inside the Rajasthan pull (4,677) are identical to a Jaipur-only pull. Larger states (Uttar Pradesh, 71 districts) are untested, so the client checks every response.

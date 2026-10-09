@@ -10,7 +10,7 @@ import difflib
 import json
 import time
 import pandas as pd
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 import requests
 
@@ -186,3 +186,40 @@ def check_response(payload: dict, start_date: str, endpoint: str) -> list[str]:
                 problems.append(f"the modal price column contains {df['modal_price'].isnull().sum()} null values")
         
     return problems
+
+# ---------- 1.8c: save raw responses ----------
+
+RAW_DIR: Path = ROOT / "data" / "raw" / "ceda"
+
+
+def raw_name(endpoint: str, commodity_id: int, state_id: int, start: str, end: str) -> str:
+    """File name stem, same pattern as the probes, e.g. prices_c23_s8_dALL_2018-01-01_2026-10-10."""
+    return f"{endpoint}_c{commodity_id}_s{state_id}_dALL_{start}_{end}"
+
+
+def save_raw(resp: requests.Response, name: str, body: dict | None = None) -> Path:
+    """Save the response bytes untouched, plus a .request.json describing the call.
+
+    The Authorization header (API key) is never written to disk.
+    """
+    stamp = datetime.now().strftime("%Y%m%dT%H%M%S")
+    stem = f"{name}_{stamp}_http{resp.status_code}"
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
+
+    data_path = RAW_DIR / f"{stem}.json"
+    data_path.write_bytes(resp.content)  # exactly as received
+
+    request_info = {
+        "url": resp.url,
+        "method": resp.request.method,
+        "body": body,
+        "requested_at": stamp,
+        "http_status": resp.status_code,
+        "ratelimit_remaining": resp.headers.get("RateLimit-Remaining"),
+        "ratelimit_reset": resp.headers.get("RateLimit-Reset"),
+    }
+    (RAW_DIR / f"{stem}.request.json").write_text(
+        json.dumps(request_info, indent=2), encoding="utf-8"
+    )
+    log.info("Saved %s (%d bytes)", data_path.name, len(resp.content))
+    return data_path

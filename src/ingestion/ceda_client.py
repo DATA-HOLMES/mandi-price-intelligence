@@ -9,6 +9,7 @@ PLUMBING. Built in pieces:
 import difflib
 import json
 import time
+import pandas as pd
 from datetime import date
 from pathlib import Path
 import requests
@@ -140,3 +141,48 @@ def ceda_request(session: requests.Session, method: str, path: str,
         return resp
 
     raise RuntimeError(f"{method} {path} failed after {cfg['max_retries']} attempts")
+
+# ---------- 1.8c: response checks ----------
+
+def check_response(payload: dict, start_date: str, endpoint: str) -> list[str]:
+    """Return a list of problems. Empty list = response is OK."""
+    output = payload.get("output")
+    if output is None:
+        return ["missing 'output' wrapper"]
+
+    problems = []
+    if output.get("type") != "success":
+        problems.append(f"type is {output.get('type')!r}, expected 'success'")
+    if output.get("message") != "Data exists":
+        problems.append(f"message is {output.get('message')!r}, expected 'Data exists'")
+
+    data = output.get("data")
+    if not data:
+        problems.append("data is empty or missing")
+        return problems  # no rows -> nothing more to check
+
+    df = pd.DataFrame(data)
+
+    # Check 4 (you write): dates
+    if "date"  not in df.columns:
+        problems.append("no date column ")
+    else:
+        dates = df["date"].str[:10]
+        n_missing = dates.isnull().sum()
+        if n_missing > 0:
+            problems.append(f"{n_missing} rows have no date")
+        dates = dates.dropna()
+        today = date.today().isoformat()
+        if not dates.empty and dates.min() < start_date:
+            problems.append(f"earliest date {dates.min()} is before start_date {start_date}")
+        if not dates.empty and dates.max() > today:
+            problems.append(f"latest date {dates.max()} is after today {today}")
+    # Check 5 (you write): modal price, prices endpoint only
+    if endpoint == "prices":
+        if 'modal_price' not in df.columns:
+            problems.append('no modal price found')
+        else:
+            if df['modal_price'].isnull().any():
+                problems.append(f"the modal price column contains {df['modal_price'].isnull().sum()} null values")
+        
+    return problems

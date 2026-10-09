@@ -31,6 +31,10 @@
 - Field names differ from the Swagger examples (e.g. `commodity_id` and `commodity_name`, not `id` and `name`).
 - `/geographies` needs no `commodity_id`, despite the docs.
 - Dates come as `YYYY-MM-DDT00:00:00.000Z`; keep the date part only, with no timezone conversion.
+- What: a successful response has `output.type = "success"` and `output.message = "Data exists"` (exact, lowercase "success").
+- Evidence: saved probe `prices_c23_s8_dALL_2018-01-01_2026-10-04_..._http200.json` (Rajasthan onion prices, 55,368 rows), checked 2026-10-10.
+- So what: HTTP 200 alone is not trusted. `check_response` in `ceda_client.py` also checks type, message, non-empty data, dates and modal price before a response is accepted.
+- Status: confirmed for a successful response. The type/message CEDA returns when no data exists is not yet seen; record it if it appears in the full pull (1.9).
 ### Identifiers
 - Census 2011 coding: 36 states/UTs, 640 districts, 453 commodities.
 - Onion 23, Potato 24, Tomato 78 (excluded: Sweet Potato 152, Onion Green 358).
@@ -57,6 +61,7 @@
 - 55,368 price rows and 56,958 arrival rows.
 - 2018-01-01 to 2025-10-30, so the data ends about 11 months before the access date.
 - 28 of 33 districts report onion.
+
 
 ## 2. Kaggle raw Agmarknet scrape (reconciliation only)
 To be completed.

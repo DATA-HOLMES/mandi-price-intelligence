@@ -17,7 +17,7 @@ import requests
 from src.utils.config import ROOT  ,get_secret, load_settings
 from src.utils.logger import get_logger
 
-log = get_logger(__name__)
+log = get_logger("ceda_client")
 IDS_PATH: Path = ROOT / "data" / "reference" / "ceda_ids.json"
 
 
@@ -223,3 +223,117 @@ def save_raw(resp: requests.Response, name: str, body: dict | None = None) -> Pa
     )
     log.info("Saved %s (%d bytes)", data_path.name, len(resp.content))
     return data_path
+
+# ---------- 1.8d: full pull + manifest ----------
+
+MANIFEST_PATH: Path = RAW_DIR / "manifest.csv"
+ENDPOINTS = ["prices", "quantities"]
+
+
+def get_lookups(session: requests.Session | None) -> tuple[list[dict], list[dict]]:
+    """Commodities + geographies lists.
+
+    Live (2 requests, saved untouched) if a session is given; otherwise the
+    newest saved copies (free, used for dry runs).
+    """
+    if session is None:
+        def load(pattern: str) -> list[dict]:
+            newest = max(RAW_DIR.rglob(pattern), key=lambda p: p.stat().st_mtime)
+            return json.loads(newest.read_text(encoding="utf-8"))["output"]["data"]
+        return load("commodities_*_http200.json"), load("geographies_*_http200.json")
+
+    out = []
+    for endpoint in ["commodities", "geographies"]:
+        resp = ceda_request(session, "GET", f"/agmarknet/{endpoint}")
+        save_raw(resp, endpoint)
+        out.append(resp.json()["output"]["data"])
+    return out[0], out[1]
+
+
+def load_manifest() -> pd.DataFrame:
+    """One row per attempted request. Empty table if no pull has run yet."""
+    if MANIFEST_PATH.exists():
+        return pd.read_csv(MANIFEST_PATH, dtype=str)
+    return pd.DataFrame(columns=["key", "status"])
+
+
+def append_manifest(row: dict) -> None:
+    """Add one row to manifest.csv (written straight after every request)."""
+    pd.DataFrame([row]).to_csv(
+        MANIFEST_PATH, mode="a", index=False, header=not MANIFEST_PATH.exists()
+    )
+
+
+def pull_one(session: requests.Session, endpoint: str, key: str, name: str,
+             body: dict, start: str, state: str, commodity: str) -> None:
+    """Send one request, save it untouched, check it, record it in the manifest."""
+    row = {"key": key, "state": state, "commodity": commodity, "endpoint": endpoint,
+           "fetched_at": datetime.now().isoformat(timespec="seconds")}
+    try:
+        resp = ceda_request(session, "POST", f"/agmarknet/{endpoint}", body)
+        path = save_raw(resp, name, body)
+        payload = resp.json()
+    except Exception as err:  # record any failure and keep going
+        append_manifest({**row, "file": "", "rows": "", "min_date": "", "max_date": "",
+                         "problems": str(err), "status": "failed"})
+        log.error("FAILED %s: %s", key, err)
+        return
+
+    problems = check_response(payload, start, endpoint)
+    data = payload.get("output", {}).get("data") or []
+    dates = sorted(r["date"][:10] for r in data if r.get("date"))
+    if data and len(data) % 1000 == 0:
+        problems.append(f"row count {len(data)} is a round number: possible truncation")
+
+    append_manifest({**row, "file": path.name, "rows": len(data),
+                     "min_date": dates[0] if dates else "",
+                     "max_date": dates[-1] if dates else "",
+                     "problems": "; ".join(problems),
+                     "status": "check" if problems else "ok"})
+    log.info("%s: %d rows, %s to %s, %s", key, len(data),
+             dates[0] if dates else "-", dates[-1] if dates else "-",
+             "CHECK: " + "; ".join(problems) if problems else "ok")
+
+
+def run_pull(dry_run: bool = False) -> None:
+    """Pull prices + quantities for every state x commodity in settings.yaml.
+
+    Re-running is safe: requests already logged 'ok' or 'check' are skipped;
+    only 'failed' ones are tried again.
+    """
+    settings = load_settings()
+    start, end = settings["scope"]["start_date"], date.today().isoformat()
+    session = None if dry_run else make_session()
+
+    commodities, geographies = get_lookups(session)
+    ids = resolve_ids(settings, commodities, geographies)
+    if not dry_run:
+        save_ids_snapshot(ids)
+
+    manifest = load_manifest()
+    done = set(manifest.loc[manifest["status"].isin(["ok", "check"]), "key"])
+
+    for state, state_id in ids["states"].items():
+        districts = sorted({g["census_district_id"] for g in geographies
+                            if g["census_state_id"] == state_id})
+        for commodity, commodity_id in ids["commodities"].items():
+            for endpoint in ENDPOINTS:
+                key = f"{endpoint}_c{commodity_id}_s{state_id}"
+                if key in done:
+                    log.info("Skip %s (already done)", key)
+                    continue
+                body = {"commodity_id": commodity_id, "state_id": state_id,
+                        "district_id": districts, "from_date": start, "to_date": end}
+                if dry_run:
+                    log.info("PLAN %s | %s | %s | %d districts", key, state,
+                             commodity, len(districts))
+                    continue
+                pull_one(session, endpoint, key, raw_name(endpoint, commodity_id,
+                         state_id, start, end), body, start, state, commodity)
+
+    log.info("Finished. Manifest: %s", MANIFEST_PATH)
+
+
+if __name__ == "__main__":
+    import sys
+    run_pull(dry_run="--dry-run" in sys.argv)

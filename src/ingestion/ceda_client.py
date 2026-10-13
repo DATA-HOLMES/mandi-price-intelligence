@@ -132,6 +132,8 @@ def ceda_request(session: requests.Session, method: str, path: str,
             log.warning("Server error; retry %d in %ds", attempt, wait)
             time.sleep(wait)
             continue
+        if resp.status_code >= 400:
+            log.error("%s %s -> HTTP %s: %s", method, path, resp.status_code, resp.text[:300])
         resp.raise_for_status()  # any other error: stop, don't waste quota
 
         if remaining is not None and int(remaining) == 0:

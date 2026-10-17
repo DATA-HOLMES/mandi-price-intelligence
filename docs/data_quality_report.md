@@ -69,6 +69,10 @@ Full row counts (in → mapped → quarantined → loaded) are added in Week 2.
 2. Were June–July 2024 arrivals not reported by Agmarknet, or lost in processing?
 3. Why does the data end on 2025-10-30, and when is the next update expected?
 4. Why do a few market-days still have two rows with different prices?
+5. How long do API keys last before they expire?
+6. Why are Uttar Pradesh queries ~10x slower per row than Rajasthan? Is there a recommended maximum request size?
+7. Is `district_id` required in prices/quantities requests, or is there a way to request a whole state?
+8. Does the website download's `variety` column ("Other" for most rows) come from the source data, or is it a placeholder?
 
 ## 3. Row counts, quarantine and reconciliation
 To be completed in Week 2.

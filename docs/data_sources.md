@@ -66,6 +66,34 @@
 - 28 of 33 districts report onion.
 
 
+### Request body (prices, quantities)
+- What: The POST body needs `commodity_id`, `state_id`, `district_id` (an explicit list of every district ID wanted), `from_date`, `to_date` (YYYY-MM-DD). Leaving out `district_id` has not been tested.
+- Evidence: Saved probe request `prices_c23_s8_dALL_..._20261004T142642_http200.request.json` lists all 33 Rajasthan IDs (99–131). The same body shape gave 6/6 ok responses in the full pull on 2026-10-14.
+- So what: The client builds each state's district list from `/agmarknet/geographies`.
+- Status: Confirmed.
+
+### API key expiry
+- What: API keys expire. The exact lifetime is unknown.
+- Evidence: Key generated 2026-10-04 (`.env` last written that day), worked on 2026-10-10, rejected on 2026-10-14 with HTTP 401 and the message "Api key expired". A new key was generated on 2026-10-14.
+- So what: Renew the key before every pull; Phase 2's monthly backfill must allow for this. The client now logs CEDA's error message on any 4xx/5xx.
+- Status: Lifetime between 6 and 10 days, not confirmed. Note the date the current key stops working.
+
+### Server timeout (HTTP 504) uses quota
+- What: Requests that take longer than ~60 s return HTTP 504. A 504 still counts against the 40/hour quota, even though it carries no RateLimit headers.
+- Evidence: Full pull on 2026-10-14. Quota was 31 when the UP requests began; after 31 attempts that all returned 504 at ~60 s, the next request got HTTP 429 with `RateLimit-Remaining` = 0.
+- So what: The client does not retry a 504 (the cause is request size, not a blip) and stops after 3 consecutive failures. Every request must be sized to finish well under 60 s.
+- Status: Confirmed.
+
+### Query speed differs by state
+- What: CEDA returns data at very different speeds for different states.
+- Evidence: Rajasthan, onion prices, 2018 to latest: 55,368 rows in ~50 s (~1,100 rows/s), 2026-10-14. Uttar Pradesh, 5 districts, 2024: 4,842 rows in 43.0 s (~112 rows/s), 2026-10-15. Jaipur, 1 month: 56 rows in 6.1 s.
+- So what: Size requests for each state from a timing probe, not from Rajasthan's speed.
+- Status: Confirmed for UP. Madhya Pradesh, Gujarat and Maharashtra not yet timed.
+
+### Website download
+- Tested and not used; see D-014.
+
+
 ## 2. Kaggle raw Agmarknet scrape (reconciliation only)
 To be completed.
 

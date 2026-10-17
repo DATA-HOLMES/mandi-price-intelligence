@@ -100,24 +100,13 @@ Every non-obvious decision, with date and reason. Newest at the bottom.
     portfolio repo gives a poor impression and duplicates what the docs say.
 - **Status:** Final.
 
-### D-012: Pull one state × commodity × endpoint per request, throttled by rate-limit headers
-- **Date:** 2026-10-04
-- **Decision:** Each API request covers one state, one commodity and one endpoint (prices
-  or quantities) for the full date range, with all the state's districts in one request.
-  The client reads `RateLimit-Remaining` and `RateLimit-Reset` and waits for the window to
-  reset when the budget runs out.
-- **Reason:** The API allows 40 requests per hour. A whole-state request for Rajasthan
-  onion (2018 to Oct 2025) returned 55,368 price rows with no truncation: its Jaipur rows
-  were identical to a Jaipur-only request. This makes the full pull about 30 requests.
-- **Alternatives considered:**
-  - *Monthly requests.* Rejected: about 2,900 requests (5 states × 3 commodities × ~96
-    months × 2 endpoints), roughly 72 hours at 40/hour.
-  - *One request per district.* Rejected: about 1,300 requests, roughly 32 hours.
-  - *A fixed delay between requests.* Rejected: the headers tell us exactly when the
-    budget refills, so guessing a delay is either too slow or risks HTTP 429 errors.
-- **Status:** Provisional. Truncation is verified for Rajasthan only. If a larger state
-  (e.g. Uttar Pradesh, 71 districts) fails the checks, split that state into smaller
-  district groups.
+### D-012 — Revision (2026-10-17): pull strategy for supply states
+- **What happened:** Whole-state pulls worked for Rajasthan (33 districts): 6/6 responses ok, ~50 s each; onion prices 55,368 rows, identical to the probe. Uttar Pradesh and Madhya Pradesh failed: every request returned HTTP 504 after ~60 s (2026-10-14); 10 requests failed after 3 attempts each.
+- **Not a temporary outage (probes, 2026-10-15):** Jaipur, 1 month: 56 rows in 6.1 s (server healthy). UP, 5 districts, 2024 only: 4,842 rows in 43.0 s (~112 rows/s, vs ~1,100 rows/s for Rajasthan).
+- **Decision:** Keep the complete Rajasthan pull. For Maharashtra, Madhya Pradesh, Gujarat and Uttar Pradesh, pull only the key wholesale supply districts per commodity (list in D-015), with each request sized to finish well under 60 s. The client no longer retries HTTP 504 and stops after 3 consecutive failures.
+- **Reason:** Covering all of UP at the measured speed would take ~720 requests (~18 hours of quota at 40/hour), each close to the 60 s cutoff.
+- **Alternatives considered:** 1-year date chunks (1 year of all UP districts still timed out); district groups for whole states (~720 requests for UP alone); website download (D-014).
+- **Status:** Provisional until a single-district request is timed.
 
 ### D-013: The analysis window ends at CEDA's last available date
 - **Date:** 2026-10-08
@@ -133,3 +122,13 @@ Every non-obvious decision, with date and reason. Newest at the bottom.
     automatically.
 - **Status:** Final for Phase 1. The exact end date is re-measured on the full pull and
   reported in the README.
+
+
+
+  ### D-014 (2026-10-17): CEDA website download not used as a source
+- **Decision:** Do not use downloads from the CEDA website; the API stays the only CEDA source.
+- **Evidence:** A 1-year download (2017–18) showed inconsistency in data when compared to the api version . A small download (Jaipur, Onion, Jan 2024) worked: 56 rows, the same count the API returned for the same request. Columns: t, cmdty, market_id, market_name, state_id, state_name, district_id, district_name, variety, p_min, p_max, p_modal. `variety`: 53 "Other", 3 "Onion". No grade column.
+- **Reason:** It adds no real information (variety is mostly a placeholder, no grade), needs manual downloads, fails on large requests, and uses different column names from the API.
+- **Side finding:** Supports D-010 (no variety in the fact grain). Based on one market-month only, so D-010 stays provisional.
+- **Alternatives considered:** Using the website for supply states in small manual pieces. Rejected for the reasons above.
+- **Status:** Final for Phase 1. The test file is kept untouched in `data/raw/ceda/bulk/price_data.csv`.

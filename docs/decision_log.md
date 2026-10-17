@@ -132,3 +132,20 @@ Every non-obvious decision, with date and reason. Newest at the bottom.
 - **Side finding:** Supports D-010 (no variety in the fact grain). Based on one market-month only, so D-010 stays provisional.
 - **Alternatives considered:** Using the website for supply states in small manual pieces. Rejected for the reasons above.
 - **Status:** Final for Phase 1. The test file is kept untouched in `data/raw/ceda/bulk/price_data.csv`.
+
+### D-015 (2026-10-17): Supply districts per commodity
+- **Decision:** Rajasthan stays complete (all 33 districts). The four supply states are covered only by their main wholesale districts:
+  - Onion: Nashik (MH, 516); Indore 439, Ujjain 435, Shajapur 436, Ratlam 434, Dhar 438 (MP); Bhavnagar 481, Rajkot 476 (GJ)
+  - Potato: Agra 146, Farrukhabad 159, Kannauj 160 (UP); Banas Kantha 469 (GJ)
+  - Tomato: Nashik 516, Pune 521, Satara 527 (MH)
+  - Excluded: UP onion; MP and Maharashtra potato; MP, Gujarat and UP tomato.
+- **Reason:** A Jaipur bulk buyer sources from major terminal mandis, not from every small market. Whole-state pulls are not feasible through the API (D-012).
+- **Evidence (strength in brackets):**
+  - Onion, Nashik [strong]: Lasalgaon (Nashik) is described as Asia's largest onion market; a Lasalgaon APMC official reported that the district supplies Rajasthan, among other states (FreshPlaza; Business Today).
+  - Onion, MP and Gujarat [weak]: one-day arrivals snapshot, 30 May 2024 (Global Agriculture): Badnawar (Dhar) ~133 t, Ujjain ~94 t, Ratlam ~89 t, Shajapur ~68 t, Indore ~55 t; Mahuva (Bhavnagar) ~193 t, Rajkot ~151 t.
+  - UP onion excluded: UP produces about 2% of India's onion (NHB monthly onion report, 2018).
+  - Potato [moderate]: the south-west UP belt including Agra, Kannauj and Farrukhabad grows about a fifth of India's potatoes (PotatoPro); Banaskantha is reported as India's top potato district and Deesa as the largest potato mandi (PotatoPro; indianpotato.com, an industry site).
+  - Tomato, Maharashtra [strong]: Consumer Affairs Ministry statement (July 2023): supplies to Gujarat and MP came mostly from Satara, Narayangaon (Pune) and Nashik (Outlook Business).
+- **Check after the pull:** Rank the chosen districts by measured arrivals. Drop any with little volume, and record the result here.
+- **Alternatives considered:** whole supply states (infeasible, D-012); one district per state (too thin for the "where to buy" comparison).
+- **Status:** Provisional.

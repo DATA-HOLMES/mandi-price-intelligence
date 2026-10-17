@@ -93,6 +93,18 @@
 ### Website download
 - Tested and not used; see D-014.
 
+### Query speed (revised 2026-10-17)
+- What: Most of a request's time appears to be a fixed cost that depends on the state, not on the rows returned. Rajasthan is fast; Maharashtra and Uttar Pradesh are slow.
+- Evidence:
+  | Request | Rows | Time |
+  |---|---|---|
+  | Jaipur (RJ), 1 month | 56 | 6.1 s |
+  | Rajasthan, all districts, 2018 to latest | 55,368 | ~50 s |
+  | UP, 5 districts, 2024 | 4,842 | 43.0 s |
+  | Nashik (MH), 2024 | 4,207 | 46.5 s |
+  | Nashik (MH), Jan 2024 | 366 | 36.9 s |
+- So what: Splitting by date does not bring Maharashtra requests below ~37 s. Group a state's districts into one request so the fixed cost is paid once; keep each request to roughly 4,000–5,000 rows so it finishes under 60 s.
+- Status: Confirmed for Maharashtra. UP 1-month not timed; Madhya Pradesh and Gujarat not timed.
 
 ## 2. Kaggle raw Agmarknet scrape (reconciliation only)
 To be completed.

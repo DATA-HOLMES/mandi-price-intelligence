@@ -10,7 +10,7 @@ import difflib
 import json
 import time
 import pandas as pd
-from datetime import date, datetime
+from datetime import date, datetime ,timedelta
 from pathlib import Path
 import requests
 
@@ -336,6 +336,91 @@ def run_pull(dry_run: bool = False) -> None:
     log.info("Finished. Manifest: %s", MANIFEST_PATH)
 
 
+# ---------- 1.9b: supply-district pull (D-012 rev., D-015, D-016) ----------
+
+def date_pieces(start: str, split_until: str, end: str) -> list[tuple[str, str]]:
+    """Half-year pieces from start to split_until, then one final piece to end.
+
+    Assumes start is 1 Jan or 1 Jul. Example:
+    ("2018-01-01", "2025-06-30", "2026-10-17") ->
+    [("2018-01-01","2018-06-30"), ..., ("2025-01-01","2025-06-30"), ("2025-07-01","2026-10-17")]
+    """
+    pieces = []
+    piece_start = date.fromisoformat(start)
+    last = date.fromisoformat(split_until)
+    while piece_start <= last:
+        piece_end = date(piece_start.year, 6, 30) if piece_start.month < 7 \
+            else date(piece_start.year, 12, 31)
+        pieces.append((piece_start.isoformat(), piece_end.isoformat()))
+        piece_start = piece_end + timedelta(days=1)
+    pieces.append((piece_start.isoformat(), end))
+    return pieces
+
+
+def supply_plan(settings: dict, ids: dict, geographies: list[dict]) -> list[dict]:
+    """One planned request per commodity x state x date piece x endpoint.
+
+    Raises if a district ID in settings does not belong to its state, so a
+    typo in D-015 is caught before any quota is spent.
+    """
+    cfg = settings["supply_pull"]
+    pieces = date_pieces(settings["scope"]["start_date"],
+                         cfg["half_year_pieces_until"], date.today().isoformat())
+    plan = []
+    for commodity, by_state in cfg["districts"].items():
+        commodity_id = ids["commodities"][commodity]
+        for state, districts in by_state.items():
+            state_id = ids["states"][state]
+            valid = {g["census_district_id"] for g in geographies
+                     if g["census_state_id"] == state_id}
+            wrong = sorted(set(districts) - valid)
+            if wrong:
+                raise ValueError(f"{commodity} / {state}: district IDs {wrong} "
+                                 f"are not in state_id {state_id}")
+            for from_date, to_date in pieces:
+                for endpoint in ENDPOINTS:
+                    plan.append({
+                        "key": f"{endpoint}_c{commodity_id}_s{state_id}_{from_date}_{to_date}",
+                        "endpoint": endpoint, "state": state, "commodity": commodity,
+                        "body": {"commodity_id": commodity_id, "state_id": state_id,
+                                 "district_id": sorted(districts),
+                                 "from_date": from_date, "to_date": to_date},
+                    })
+    return plan
+
+
+def run_supply_pull(dry_run: bool = False) -> None:
+    """Pull the D-015 supply districts in date pieces. Resumable via the manifest."""
+    settings = load_settings()
+    session = None if dry_run else make_session()
+    commodities, geographies = get_lookups(session)
+    ids = resolve_ids(settings, commodities, geographies)
+
+    plan = supply_plan(settings, ids, geographies)
+    manifest = load_manifest()
+    done = set(manifest.loc[manifest["status"].isin(["ok", "check"]), "key"])
+    todo = [p for p in plan if p["key"] not in done]
+
+    # One summary line per commodity x state group instead of ~190 lines
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for p in todo:
+        groups.setdefault((p["commodity"], p["state"]), []).append(p)
+    for (commodity, state), items in groups.items():
+        dates = [(i["body"]["from_date"], i["body"]["to_date"]) for i in items]
+        log.info("PLAN %s | %s | districts %s | %d requests | %s .. %s",
+                 commodity, state, items[0]["body"]["district_id"], len(items),
+                 dates[0][0], dates[-1][1])
+    log.info("Planned %d requests, %d already done, %d to do",
+             len(plan), len(plan) - len(todo), len(todo))
+
+    if dry_run:
+        return
+    raise NotImplementedError("Real run comes in 1.9b-ii")
+
+
 if __name__ == "__main__":
     import sys
-    run_pull(dry_run="--dry-run" in sys.argv)
+    if "--supply" in sys.argv:
+        run_supply_pull(dry_run="--dry-run" in sys.argv)
+    else:
+        run_pull(dry_run="--dry-run" in sys.argv)
